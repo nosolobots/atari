@@ -13,12 +13,11 @@ start:
 ; Meaning the entire TIA register space and also RAM
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
     lda #0          ; A = 0
-    ldx #$FF        ; X = $FF
-
 loop:
-    sta $0,X        ; stores A register at address $0 + X
-    dex             ; X--
+    dex             ; X-- (X was initiated to $FF)
+    sta $0,X        ; stores A register at address ($0 + X)
     bne loop        ; loop until X==0 (Z-flag set)
+    sta $0          ; loop doesn't cover address $00 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Fill ROM size to exactly 4KB ($F000 - $FFFF)
