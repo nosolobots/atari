@@ -12,10 +12,11 @@ start:
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Set background luminosity color to yellow
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+setbg:
     lda #$1E        ; A = $1E (NTSC yellow)
     sta COLUBK      ; store A to BackgroundColor address ($09) 
 
-    jmp start       ; repeat from start
+    jmp setbg       ; repeat
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Fill ROM to exactly 4KB
