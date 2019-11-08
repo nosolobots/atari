@@ -56,8 +56,7 @@ loop_vblank:
     sta VBLANK      ; turn off VBLANK
 
 ;; generate the 192 visible scanlines
-    ldx $192
-    lda #2
+    ldx #192
 scanline:
     stx COLUBK
     sta WSYNC
@@ -65,7 +64,7 @@ scanline:
     bne scanline 
 
 ;; generate the 30 scanlines of the Overscan
-    lda $2
+    lda #2
     sta VBLANK
 
     ldx #30
@@ -74,7 +73,7 @@ loop_overscan:
     dex
     bne loop_overscan
 
-    lda $0
+    lda #0
     sta VBLANK      ; turn off VBLANK
 
 ;; loop to draw the next frame
