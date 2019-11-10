@@ -33,7 +33,7 @@ clear_loop:
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Set constant TIA values
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    lda #$84        ; X=64 (NTSC Blue)
+    lda #$80        ; X=64 (NTSC Blue)
     sta COLUBK      ; set Background color
     lda #$1C        ; X=97 (NTSC Green)
     sta COLUPF      ; set Playfield color
@@ -86,12 +86,13 @@ loop_pf_top:
     dex
     bne loop_pf_top
 
-;; Generate top 164 playfield (same PF0) (-#------------------)
-    lda #$20
-    sta PF0         ; PF0 = 00X0 0000 > -#--
+;; Generate top 164 playfield (same PF0) (-##----------------#)
+    lda #$60
+    sta PF0         ; PF0 = 00X0 0000 > -##-
     lda #0
     sta PF1         ; PF1 = XXX0 0000 > --------
-    sta PF2         ; PF2 = 0000 0000 > --------
+    lda #$80
+    sta PF2         ; PF2 = X000 0000 > -------#
     ldx #164
 loop_pf_middle:
     sta WSYNC
