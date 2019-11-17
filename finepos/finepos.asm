@@ -14,8 +14,9 @@
     org $80
 SpriteHeight    equ 9
 MaxXPos         equ 150
-MinXPos         equ 10
+MinXPos         equ 0
 MaxYPos         equ 170
+BGColor         equ $80
 YPos            byte
 XPos            byte
 
@@ -29,71 +30,65 @@ XPos            byte
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Init system
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    sei             ; disable interrupts
-    cld             ; disable BCD
-    ldx #$FF        ; X = $FF
-    txs             ; SP = $FF
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Clear TIA&RAM
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    lda #0          ; A = 0
-    tax             ; X = A
-.clear
-    dex             ; X--
-    sta $0,X        ; ($0 + X) = A
-    bne .clear      ; if !Z jmp .clear
-
+    CLEAN_START
+    
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Init Var&Reg
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    ldx #$80        ; X = $80
-    stx COLUBK      ; Background_Color = $80
+    ldx #BGColor
+    stx COLUBK      ; set Background_Color
 
-    ldx #MinXPos    ; 
+    ldx #50         ; 
     stx XPos        ; XPos = MinXPos
-    ldy #100        ; 
+    ldy #30        ; 
     sty YPos        ; YPos = 100
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Init Frame
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 .new_frame
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; 3 Vertical Sync
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    lda #2          ; A = 2
-    sta VSYNC       ; activate Vertical Sync
-    REPEAT 3        
-        sta WSYNC   ; wait 3 sync's
-    REPEND
-    lda #0      
-    sta VSYNC       ; deactivate Vertical Sync
+    VERTICAL_SYNC
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Horizontal positioning (X+68 TIA clocks)/3 CPU cycles
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    lda XPos        
+    sta WSYNC		; wait for beginning scanline 
+    sta HMCLR		; reset old horizontal position
+.hloop              	; loop (5 CPU cycles = divide by (3*5))
+    sbc #15
+    bcs .hloop
+
+; use remainder for fine adjustment -7 to +8
+    eor #7          ; (23-A)%16
+    asl
+    asl
+    asl
+    asl
+    
+    sta HMP0        ; set fine position
+    sta RESP0       ; reset coarse position
+
+    sta WSYNC
+    sta HMOVE       ; aplly fine offset
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; 37 Vertical Blank (-1 because previous WSYNC)
+;; 37 Vertical Blank (-3)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    lda #2      
-    sta VBLANK      ; activate Vertical Blank
-    ldx #37         ; do 37(-1) scanlines
+    lda #2
+    sta VBLANK     ; turn VBLANK off
+    
+    ldx #34         
 .vblank
     sta WSYNC
     dex
     bne .vblank 
-    stx VBLANK      ; deactivate Vertical Blank
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Horizontal coarse positioning (X+68 TIA clocks)/3 CPU cycles
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    lda XPos        
-    ;adc #68
-    sec
-    sta WSYNC 
-.hloop              ; loop (5 CPU cycles = divide by (3*5))
-    sbc #15
-    bcs .hloop
-    sta RESP0       ; activate horizontal pos
+    lda #0
+    sta VBLANK     ; turn VBLANK off
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Visible scanlines
@@ -110,18 +105,20 @@ XPos            byte
 
 .inSprite
     tay                 ; Y = A
-    lda SpriteCol,Y     ; A = (SpriteCol + Y)
-    sta COLUP0          ; set color
     lda SpriteGrp,Y     ; A = (SpriteGrp + Y)
     sta WSYNC           ; wait sync
     sta GRP0            ; set graphic for player0
+    lda SpriteCol,Y     ; A = (SpriteCol + Y)
+    sta COLUP0          ; set color    
 
     dex                 ; X--
     bne .LVScan         ; next scanline
 
+; Clear sprites before overscan
+    stx GRP0
+    
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; OVERSCAN (30)
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
     lda #2
     sta VBLANK
     ldx #30
@@ -144,12 +141,12 @@ loop_vblank30:
     stx XPos
 .xNotEOL
     
-;    ldy YPos            ; Y = YPos
-;    dey                 ; Y--
-;    bne .yUpdate        ; (Y>0)?
-;    ldy #MaxYPos        ; if not, Y = YPos
-;.yUpdate
-;    sty YPos
+    ldy YPos            ; Y = YPos
+    dey                 ; Y--
+    bne .yUpdate        ; (Y>0)?
+    ldy #MaxYPos        ; if not, Y = YPos
+.yUpdate
+    sty YPos
 
     jmp .new_frame  ; 
 
@@ -158,7 +155,7 @@ loop_vblank30:
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
     org $FFEA
 SpriteCol:
-    byte #0
+    byte #$80
     byte #$40
     byte #$40
     byte #$42
