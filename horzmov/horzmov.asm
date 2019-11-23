@@ -1,6 +1,6 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; -- horizpos.asm --
-;; Moves the player's bitmap horizontaly
+;; -- horizmov.asm --
+;; Reads input to move the player's bitmap horizontaly
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
     processor 6502
 
@@ -10,114 +10,118 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; RAM Variables Declaration
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    seg.u .Variables
+    seg.u Variables
+  
     org $80
-SpriteHeight    equ 9
-MaxXPos         equ 150
-MinXPos         equ 10
-MaxYPos         equ 170
-YPos            byte
-XPos            byte
+
+SpriteHeight    equ 10
+XMargin         equ 15
+XInitial        equ 60
+YInitial        equ 10
+BGColor         equ 0
+ShipXPos        .byte
+ShipYPos        .byte
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; ROM START
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
     seg .Code
+    
     org $F000       ; ROM cartridge initial address
-.start
+
+start:
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Init system
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    sei             ; disable interrupts
-    cld             ; disable BCD
-    ldx #$FF        ; X = $FF
-    txs             ; SP = $FF
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Clear TIA&RAM
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    lda #0          ; A = 0
-    tax             ; X = A
-.clear
-    dex             ; X--
-    sta $0,X        ; ($0 + X) = A
-    bne .clear      ; if !Z jmp .clear
-
+    CLEAN_START
+    
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Init Var&Reg
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    ldx #$80        ; X = $80
-    stx COLUBK      ; Background_Color = $80
-
-    ldx #MinXPos    ; 
-    stx XPos        ; XPos = MinXPos
-    ldy #100        ; 
-    sty YPos        ; YPos = 100
+    ldx #XInitial   ; x,y position
+    stx ShipXPos
+    ldx #YInitial
+    stx ShipYPos
+    ldx #BGColor
+    stx COLUBK
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Init Frame
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-.new_frame
+new_frame:
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; 3 Vertical Sync
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    lda #2          ; A = 2
-    sta VSYNC       ; activate Vertical Sync
-    REPEAT 3        
-        sta WSYNC   ; wait 3 sync's
+    VERTICAL_SYNC
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Horizontal positioning (X+68 TIA clocks)/3 CPU cycles
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    lda ShipXPos
+    adc #XMargin    ; add X-margin pixels
+
+    sta WSYNC		; wait for beginning scanline 
+    sta HMCLR		; reset old horizontal position
+    sec             ; set carry flag before subtract
+hzloop:            	; loop (5 CPU cycles = divide by (3*5))
+    sbc #15
+    bcs hzloop      ; branch if not carry clear (borrow)
+
+; A contains (remainder-15)
+; convert it for fine adjustment [-7 to +8]
+    eor #7          ; (23-A)%16
+    REPEAT 4        ; HMOVE only uses 4 MSB
+        asl
     REPEND
-    lda #0      
-    sta VSYNC       ; deactivate Vertical Sync
+    
+    sta HMP0        ; set fine position
+    sta RESP0       ; reset coarse position
+
+    sta WSYNC
+    sta HMOVE       ; aplly fine offset to all objects
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; 37 Vertical Blank (-1 because previous WSYNC)
+;; 37 Vertical Blank (-3 due to horizontal positioning)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    lda #2      
-    sta VBLANK      ; activate Vertical Blank
-    ldx #37         ; do 37(-1) scanlines
-.vblank
+    lda #2
+    sta VBLANK     ; turn on VBLANK
+    
+    ldx #34         
+VBlank34:
     sta WSYNC
     dex
-    bne .vblank 
-    stx VBLANK      ; deactivate Vertical Blank
+    bne VBlank34 
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Horizontal coarse positioning (X+68 TIA clocks)/3 CPU cycles
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    lda XPos        
-    ;adc #68
-    sec
-    sta WSYNC 
-.hloop              ; loop (5 CPU cycles = divide by (3*5))
-    sbc #15
-    bcs .hloop
-    sta RESP0       ; activate horizontal pos
+    lda #0
+    sta VBLANK     ; turn off VBLANK
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Visible scanlines
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
     ldx #192            ; X = total scanlines
 
-.LVScan
+LVScan:
     txa                 ; A = X = current scanline
     sec                 ; set carry flag
-    sbc YPos            ; A -= YPos
+    sbc ShipYPos        ; A -= YPos
     cmp #SpriteHeight   ; (A - SpriteHeight) ?
-    bcc .inSprite       ; if carry clear => borrow carry => (A<SpriteHeight) jmp 
+    bcc inSprite        ; if carry clear => borrow carry => (A<SpriteHeight) jmp 
     lda #0              ; if not, A = 0
 
-.inSprite
+inSprite:
     tay                 ; Y = A
-    lda SpriteCol,Y     ; A = (SpriteCol + Y)
-    sta COLUP0          ; set color
     lda SpriteGrp,Y     ; A = (SpriteGrp + Y)
     sta WSYNC           ; wait sync
     sta GRP0            ; set graphic for player0
+    lda SpriteCol,Y     ; A = (SpriteCol + Y)
+    sta COLUP0          ; set color    
 
     dex                 ; X--
-    bne .LVScan         ; next scanline
+    bne LVScan          ; next scanline
+
+    stx GRP0            ; Clear sprites before overscan
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; OVERSCAN (30)
@@ -125,66 +129,54 @@ XPos            byte
     lda #2
     sta VBLANK
     ldx #30
-loop_vblank30:
+VBlank30:
     sta WSYNC
     dex
-    bne loop_vblank30
+    bne VBlank30
     lda #0
     sta VBLANK
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Update positions before new frame
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    inc XPos            ; (XPos)++
-    ldx XPos            ; X = XPos
-    sec
-    cpx #MaxXPos        ; (X - MaxXPos)?
-    bcc .xNotEOL        ; jump if X < MaxXPos
-    ldx #MinXPos        ; reset XPos
-    stx XPos
-.xNotEOL
-    
-;    ldy YPos            ; Y = YPos
-;    dey                 ; Y--
-;    bne .yUpdate        ; (Y>0)?
-;    ldy #MaxYPos        ; if not, Y = YPos
-;.yUpdate
-;    sty YPos
 
-    jmp .new_frame  ; 
+    jmp new_frame
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Sprite Colors
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    org $FFEA
+    org $FFE8
+
 SpriteCol:
-    byte #0
-    byte #$40
-    byte #$40
-    byte #$42
-    byte #$42
-    byte #$44
-    byte #$46
-    byte #$C4
-    byte #$C4
+    byte #$00
+    byte #$3C
+    byte #$0E
+    byte #$02
+    byte #$02
+    byte #$0E
+    byte #$0E
+    byte #$96
+    byte #$96
+    byte #$0E
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Sprite Graphics
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 SpriteGrp:
     byte #%00000000
-    byte #%10111101
-    byte #%10111101
+    byte #%00011000
+    byte #%01111110
     byte #%11111111
+    byte #%11111111
+    byte #%10111101
     byte #%00111100
-    byte #%01011010
-    byte #%00111100
-    byte #%01000010
-    byte #%10000001
+    byte #%00011000
+    byte #%00011000
+    byte #%00011000
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; ROM END
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
     org $FFFC
-    word .start
-    word .start
+    word start
+    word start
