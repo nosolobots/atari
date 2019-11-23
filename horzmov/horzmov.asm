@@ -15,7 +15,7 @@
     org $80
 
 SpriteHeight    equ 10
-XMargin         equ 15
+XMargin         equ 5
 XInitial        equ 60
 YInitial        equ 10
 BGColor         equ 0
@@ -137,8 +137,26 @@ VBlank30:
     sta VBLANK
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Update positions before new frame
+;; Update Ship position before new frame
+;; SWCHA (pressed=0)
+;; b7 - P0 Right
+;; b6 - P0 Left
+;; b5 - P0 Down
+;; b4 - P0 Up
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    ldx ShipXPos    
+    bit SWCHA           ; b6 -> Flag overflow (V)
+    bvs .skipLeft
+    dex
+.skipLeft:
+    bit SWCHA           ; b7 -> Flag Sign
+    bmi .skipRight
+    inx
+.skipRight:
+    stx ShipXPos        ; set new X position
+    lda ShipXPos
+    and #$7F            ; limit X range [0-127]
+    sta ShipXPos        ; reset X position
 
     jmp new_frame
 
@@ -149,14 +167,14 @@ VBlank30:
 
 SpriteCol:
     byte #$00
-    byte #$3C
-    byte #$0E
+    byte #$3B
     byte #$02
-    byte #$02
+    byte #$04
+    byte #$06
     byte #$0E
     byte #$0E
     byte #$96
-    byte #$96
+    byte #$98
     byte #$0E
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -164,15 +182,15 @@ SpriteCol:
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 SpriteGrp:
     byte #%00000000
-    byte #%00011000
-    byte #%01111110
-    byte #%11111111
-    byte #%11111111
-    byte #%10111101
-    byte #%00111100
-    byte #%00011000
-    byte #%00011000
-    byte #%00011000
+    byte #%00101000
+    byte #%01111100
+    byte #%11111110
+    byte #%11111110
+    byte #%10111010
+    byte #%00111000
+    byte #%00010000
+    byte #%00010000
+    byte #%00010000
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; ROM END
